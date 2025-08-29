@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roman Tic Tac Toe</title>
+<style>
+  :root {
+    --gold: #d4af37;
+    --marble-day: #f8f8f8;
+    --marble-night: #2b2b2b;
+    --accent: var(--gold);
+    --cell-size: min(25vmin, 30vw);
+  }
+  body {
+    margin: 0;
+    font-family: "Cinzel", serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    background: url('images/marble-texture.jpg') center/cover no-repeat fixed;
+    height: 100vh;
+    overflow: hidden;
+    color: var(--accent);
+  }
+
+  header {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(6px);
+    transition: opacity 0.5s;
+    z-index: 10;
+  }
+  header.hidden { opacity: 0; pointer-events: none; }
+
+  button {
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    font-size: 1rem;
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.2s;
+  }
+  button:hover, button:focus {
+    background: rgba(212,175,55,0.2);
+    transform: scale(1.05);
+  }
+
+  main {
+    margin-top: 3rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, var(--cell-size));
+    grid-template-rows: repeat(3, var(--cell-size));
+    gap: 0.5rem;
+    user-select: none;
+  }
+  .cell {
+    background: rgba(255,255,255,0.1);
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(var(--cell-size) * 0.5);
+    color: var(--accent);
+    cursor: pointer;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    transition: background 0.3s;
+  }
+  .cell:hover { background: rgba(212,175,55,0.2); }
+
+  .win {
+    background: rgba(212,175,55,0.3) !important;
+    animation: glow 1s infinite alternate;
+  }
+  @keyframes glow {
+    from { box-shadow: 0 0 5px var(--gold); }
+    to { box-shadow: 0 0 20px var(--gold); }
+  }
+
+  #status {
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    text-shadow: 0 0 6px black;
+  }
+
+  #scores {
+    margin-top: 0.5rem;
+    display: flex;
+    gap: 1rem;
+    font-size: 1rem;
+  }
+
+  /* Dialog */
+  dialog {
+    border: none;
+    border-radius: 12px;
+    padding: 1rem 2rem;
+    max-width: 90%;
+    background: var(--marble-day);
+    color: black;
+  }
+  dialog::backdrop {
+    background: rgba(0,0,0,0.6);
+  }
+
+  /* Confetti canvas */
+  #confetti {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+  <header id="topbar">
+    <button id="newRoundBtn">New Round</button>
+    <button id="customizeBtn">Customize</button>
+    <button id="resetScoresBtn">Reset Scores</button>
+    <button id="fullscreenBtn" aria-label="Toggle Fullscreen">⛶</button>
+  </header>
+
+  <main>
+    <div class="board" role="grid" aria-label="Tic Tac Toe Board"></div>
+    <div id="status" role="status" aria-live="polite"></div>
+    <div id="scores">
+      <span>X: <span id="scoreX">0</span></span>
+      <span>O: <span id="scoreO">0</span></span>
+      <span>Draws: <span id="scoreD">0</span></span>
+    </div>
+  </main>
+
+  <dialog id="customizeDialog">
+    <h2>Customize Game</h2>
+    <form method="dialog">
+      <label>Theme:
+        <select id="themeSelect">
+          <option value="day">Marble Day</option>
+          <option value="night">Marble Night</option>
+          <option value="legion">Legion</option>
+        </select>
+      </label><br><br>
+      <label>Glyphs:
+        <select id="glyphSelect">
+          <option value="standard">X / O</option>
+          <option value="roman">Gladius / Laurel</option>
+        </select>
+      </label><br><br>
+      <label>Mode:
+        <select id="modeSelect">
+          <option value="2p">2 Players</option>
+          <option value="ai">vs AI</option>
+        </select>
+      </label><br><br>
+      <label>First Move:
+        <select id="firstSelect">
+          <option value="X">X</option>
+          <option value="O">O</option>
+        </select>
+      </label><br><br>
+      <label>AI Discipline:
+        <select id="aiSelect">
+          <option value="perfect">Perfect</option>
+          <option value="pragmatic">Pragmatic</option>
+          <option value="reckless">Reckless</option>
+        </select>
+      </label><br><br>
+      <button>Close</button>
+    </form>
+  </dialog>
+
+  <canvas id="confetti"></canvas>
+
+<script>
+const boardEl = document.querySelector(".board");
+const statusEl = document.getElementById("status");
+const scoreXEl = document.getElementById("scoreX");
+const scoreOEl = document.getElementById("scoreO");
+const scoreDEl = document.getElementById("scoreD");
+const customizeDialog = document.getElementById("customizeDialog");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
+const topbar = document.getElementById("topbar");
+
+let board, currentPlayer, scores, mode, aiDiscipline, glyphs, firstMove, gameActive;
+resetGame();
+
+document.getElementById("newRoundBtn").onclick = () => resetBoard();
+document.getElementById("customizeBtn").onclick = () => customizeDialog.showModal();
+document.getElementById("resetScoresBtn").onclick = () => { scores={X:0,O:0,D:0}; updateScores(); };
+customizeDialog.addEventListener("close", ()=>resetGame());
+
+// Fullscreen
+fullscreenBtn.onclick = () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+};
+
+// Auto-hide topbar
+let hideTimer;
+function resetHideTimer() {
+  topbar.classList.remove("hidden");
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(()=>topbar.classList.add("hidden"), 3000);
+}
+["mousemove","touchstart","keydown"].forEach(ev => document.addEventListener(ev, resetHideTimer));
+resetHideTimer();
+
+function resetGame(){
+  board = Array(9).fill(null);
+  scores = scores||{X:0,O:0,D:0};
+  glyphs = document.getElementById("glyphSelect").value;
+  mode = document.getElementById("modeSelect").value;
+  aiDiscipline = document.getElementById("aiSelect").value;
+  firstMove = document.getElementById("firstSelect").value;
+  currentPlayer = firstMove;
+  gameActive = true;
+  renderBoard();
+  updateStatus();
+}
+
+function resetBoard(){
+  board = Array(9).fill(null);
+  currentPlayer = firstMove;
+  gameActive = true;
+  renderBoard();
+  updateStatus();
+}
+
+function renderBoard(){
+  boardEl.innerHTML="";
+  board.forEach((val,idx)=>{
+    const cell=document.createElement("div");
+    cell.className="cell";
+    cell.setAttribute("role","gridcell");
+    cell.setAttribute("aria-label","Cell "+(idx+1));
+    cell.onclick=()=>handleMove(idx);
+    cell.textContent = val ? renderGlyph(val) : "";
+    boardEl.appendChild(cell);
+  });
+}
+function renderGlyph(p){
+  if (glyphs==="roman"){
+    return p==="X"?"⚔️":"🌿";
+  }
+  return p;
+}
+
+function handleMove(idx){
+  if(!gameActive || board[idx]) return;
+  if(mode==="ai" && currentPlayer==="O") return; 
+  board[idx]=currentPlayer;
+  boardEl.children[idx].textContent = renderGlyph(currentPlayer);
+
+  if(checkWin(currentPlayer)){
+    endRound(currentPlayer);
+    return;
+  }
+  if(board.every(Boolean)){
+    endRound("D");
+    return;
+  }
+
+  currentPlayer=currentPlayer==="X"?"O":"X";
+  updateStatus();
+  if(mode==="ai" && currentPlayer==="O"){
+    setTimeout(aiMove,400);
+  }
+}
+
+function aiMove(){
+  let move;
+  if(aiDiscipline==="perfect") move=minimax(board,"O").index;
+  else if(aiDiscipline==="pragmatic") move=randomMove(board,0.5);
+  else move=randomMove(board,1);
+  handleMove(move);
+}
+
+function randomMove(biasBoard,p){
+  const empties=biasBoard.map((v,i)=>v?null:i).filter(v=>v!==null);
+  if(Math.random()<p) return empties[Math.floor(Math.random()*empties.length)];
+  return minimax(biasBoard,"O").index;
+}
+
+function minimax(newBoard,player){
+  const avail=newBoard.map((v,i)=>v?null:i).filter(v=>v!==null);
+  if(checkWin("X",newBoard)) return {score:-10};
+  if(checkWin("O",newBoard)) return {score:10};
+  if(avail.length===0) return {score:0};
+
+  const moves=[];
+  for(let i of avail){
+    const move={};
+    move.index=i;
+    newBoard[i]=player;
+    move.score=minimax(newBoard,player==="O"?"X":"O").score;
+    newBoard[i]=null;
+    moves.push(move);
+  }
+  return player==="O"?
+    moves.reduce((a,b)=>a.score>b.score?a:b):
+    moves.reduce((a,b)=>a.score<b.score?a:b);
+}
+
+function checkWin(p,b=board){
+  const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  return wins.some(line=>line.every(i=>b[i]===p));
+}
+function endRound(winner){
+  gameActive = false;
+  if(winner==="D") scores.D++;
+  else scores[winner]++;
+  updateScores();
+  updateStatus(winner==="D"?"It's a draw!":`${winner} wins!`);
+  highlightWin(winner);
+  confetti();
+}
+function updateStatus(msg){
+  statusEl.textContent=msg || `Turn: ${currentPlayer}`;
+}
+function updateScores(){
+  scoreXEl.textContent=scores.X;
+  scoreOEl.textContent=scores.O;
+  scoreDEl.textContent=scores.D;
+}
+function highlightWin(winner){
+  const cells=boardEl.querySelectorAll(".cell");
+  const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  wins.forEach(line=>{
+    if(line.every(i=>board[i]===winner)){
+      line.forEach(i=>cells[i].classList.add("win"));
+    }
+  });
+}
+
+// Confetti
+function confetti(){
+  if(window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const canvas=document.getElementById("confetti");
+  const ctx=canvas.getContext("2d");
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+  let pieces=Array.from({length:80},()=>({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height-canvas.height,
+    r:Math.random()*6+4,
+    d:Math.random()*80+20,
+    color:`hsl(${Math.random()*360},70%,50%)`,
+    tilt:Math.random()*10-10
+  }));
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      ctx.beginPath();
+      ctx.fillStyle=p.color;
+      ctx.fillRect(p.x,p.y,p.r,p.r);
+    });
+    update();
+  }
+  function update(){
+    pieces.forEach(p=>{
+      p.y+=Math.cos(p.d)+1+p.r/2;
+      p.x+=Math.sin(p.d);
+      if(p.y>canvas.height){
+        p.y=0; p.x=Math.random()*canvas.width;
+      }
+    });
+  }
+  let interval=setInterval(draw,20);
+  setTimeout(()=>clearInterval(interval),3000);
+}
+</script>
+</body>
+</html>
